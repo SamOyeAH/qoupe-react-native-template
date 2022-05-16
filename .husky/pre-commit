@@ -1,0 +1,14 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "✨Pretty✨"
+npx pretty-quick --staged || false
+
+echo "✨ESLint✨"
+npx lint-staged || false
+
+echo "🍀Types checking🍀"
+npm run check-types || false
+
+# If everything passes
+echo "✅Changes have been commited✅"

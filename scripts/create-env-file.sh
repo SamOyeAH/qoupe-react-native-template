@@ -1,0 +1,10 @@
+#!/bin/bash -e
+
+echo "CONFIG_ENVIRONMENT=${CONFIG_ENVIRONMENT}" >> .env
+echo "AZURE_AD_TENANT_ID=${AZURE_AD_TENANT_ID}" >> .env
+echo "API_URL_TST=${API_URL_TST}" >> .env
+echo "API_URL_ACC=${API_URL_ACC}" >> .env
+echo "API_URL_PRD=${API_URL_PRD}" >> .env
+echo "AZURE_AD_CLIENT_ID_TST=${AZURE_AD_CLIENT_ID_TST}" >> .env
+echo "AZURE_AD_CLIENT_ID_ACC=${AZURE_AD_CLIENT_ID_ACC}" >> .env
+echo "AZURE_AD_CLIENT_ID_PRD=${AZURE_AD_CLIENT_ID_PRD}" >> .env

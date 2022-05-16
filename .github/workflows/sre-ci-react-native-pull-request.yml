@@ -1,0 +1,90 @@
+name: React Native Pull Request
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    branches:
+      - master
+      - main
+
+concurrency:
+  group: ${{ github.head_ref }}/${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  checks: write
+  contents: read
+  deployments: read
+  issues: none
+  packages: write
+  pull-requests: read
+  repository-projects: none
+  security-events: none
+  statuses: read
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.config.outputs.config }}
+      runner: ${{ fromJson(steps.config.outputs.config).runner }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: read config
+        id: config
+        run: echo "::set-output name=config::`jq -M -c '.' .github/workflow-config.json`"
+  build:
+    needs: config
+    runs-on: ${{ needs.config.outputs.runner }}
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: checkout private actions
+        uses: daspn/private-actions-checkout@v2
+        with:
+          actions_list: '["RoyalAholdDelhaize/action-update-version@master"]'
+          app_id: ${{ secrets.AH_DIGITAL_APP_FRONTEND_ID }}
+          app_private_key: ${{ secrets.AH_DIGITAL_APP_FRONTEND_KEY }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '${{ fromJson(needs.config.outputs.config).node-version }}'
+          registry-url: 'https://npm.pkg.github.com'
+
+      - name: Setup yarn
+        if: contains(fromJson(needs.config.outputs.config).runner, 'ah-digital')
+        run: npm i -g yarn
+
+      - name: Get yarn cache directory
+        id: cache-dir
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache yarn directory
+        uses: actions/cache@v2
+        with:
+          path: ${{ steps.cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Set alpha version
+        id: version
+        uses: ./.github/actions/action-update-version
+        with:
+          type: alpha
+
+      - name: CI build
+        run: ./ci-build.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.AH_DIGITAL_PACKAGES_TOKEN }}
+          WITH_COVERAGE: true

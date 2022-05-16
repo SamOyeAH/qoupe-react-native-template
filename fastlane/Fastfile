@@ -1,0 +1,120 @@
+platform :android do
+    desc 'Build Android debug version'
+    lane :build_debug do
+        gradle(task: 'clean', project_dir: 'android/')
+        sh("rm", "-fr", "../android/app/src/main/assets")
+        sh("mkdir", "-p", "../android/app/src/main/assets")
+        yarn(command: 'bundle:android')
+        gradle(task: 'assemble', build_type: 'debug', project_dir: 'android/')
+    end
+
+    desc 'Build Android release version'
+    lane :build_release do
+        gradle(task: 'clean', project_dir: 'android/')
+        gradle(task: 'assemble', build_type: 'release', project_dir: 'android/')
+    end
+
+    desc 'Upload Android Debug to AppCenter'
+    lane :app_center_debug do
+        build_debug
+        appcenter_upload(
+            api_token: ENV['APP_CENTER_ANDROID_API_TOKEN'],
+            owner_name: ENV['APP_CENTER_OWNER_NAME'],
+            app_name: ENV['APP_CENTER_ANDROID_NAME'],
+            file: ENV['APK_DEBUG_LOCATION']
+        )
+    end
+
+    desc 'Upload Android Release to AppCenter'
+    lane :app_center_release do
+        build_release
+        appcenter_upload(
+            api_token: ENV['APP_CENTER_ANDROID_API_TOKEN'],
+            owner_name: ENV['APP_CENTER_OWNER_NAME'],
+            app_name: ENV['APP_CENTER_ANDROID_NAME'],
+            file: ENV['APK_RELEASE_LOCATION']
+        )
+    end
+end
+
+platform :ios do
+    desc 'Fetch and update certificates and provisioning profiles'
+    lane :update_development_certificates do
+        match(
+            app_identifier: ENV['APP_IDENTIFIER'],
+            team_id: ENV['TEAM_ID'],
+            type: 'development'
+        )
+    end
+
+    desc 'Fetch certificates and provisioning profiles'
+    lane :get_development_certificates do
+        match(
+            app_identifier: ENV['APP_IDENTIFIER'],
+            team_id: ENV['TEAM_ID'],
+            type: 'development',
+            readonly: true
+        )
+    end
+
+    desc 'Build iOS development debug version'
+    lane :build_development_debug do
+        get_development_certificates
+        yarn(command: 'ios:install')
+        gym(
+            scheme: ENV["IOS_SCHEME"],
+            workspace: ENV["IOS_WORKSPACE"],
+            skip_profile_detection: true,
+            export_method: 'development',
+            configuration: 'Debug',
+            xcargs: "DEBUG_LOCAL_BUNDLE='true'"
+        )
+    end
+
+    desc 'Build iOS development release version'
+    lane :build_development_release do
+        get_development_certificates
+        yarn(command: 'ios:install')
+        gym(
+            scheme: ENV["IOS_SCHEME"],
+            workspace: ENV["IOS_WORKSPACE"],
+            skip_profile_detection: true,
+            export_method: 'development',
+            configuration: 'Release'
+        )
+    end
+
+    desc 'Upload iOS to AppCenter'
+    lane :app_center_upload do
+        appcenter_upload(
+            api_token: ENV['APP_CENTER_IOS_API_TOKEN'],
+            owner_name: ENV['APP_CENTER_OWNER_NAME'],
+            app_name: ENV['APP_CENTER_IOS_NAME'],
+            file: ENV['IPA_LOCATION']
+        )
+    end
+
+    desc 'Upload iOS Debug to AppCenter'
+    lane :app_center_debug do
+        build_development_debug
+        app_center_upload
+    end
+
+    desc 'Upload iOS Release to AppCenter'
+    lane :app_center_release do
+        build_development_release
+        app_center_upload
+    end
+
+    desc 'Upload iOS Debug to AppCenter in CI'
+    lane :app_center_debug_ci do
+        setup_ci(force: true)
+        app_center_debug
+    end
+
+    desc 'Upload iOS Debug to AppCenter in CI'
+    lane :app_center_release_ci do
+        setup_ci(force: true)
+        app_center_release
+    end
+end

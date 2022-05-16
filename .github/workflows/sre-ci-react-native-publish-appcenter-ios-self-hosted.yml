@@ -1,0 +1,132 @@
+name: React Native Publish Appcenter iOS (Self-hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        type: choice
+        description: Build configuration
+        options:
+          - release
+          - debug
+        required: true
+        default: release
+      environment:
+        type: choice
+        description: Environmeent
+        options:
+          - development
+          - acceptance
+          - production
+        required: true
+        default: development
+
+permissions:
+  actions: write
+  checks: write
+  contents: read
+  deployments: read
+  issues: none
+  packages: write
+  pull-requests: read
+  repository-projects: none
+  security-events: none
+  statuses: read
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.config.outputs.config }}
+      runner: ${{ fromJson(steps.config.outputs.config).runner }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: read config
+        id: config
+        run: echo "::set-output name=config::`jq -M -c '.' .github/workflow-config.json`"
+  build:
+    needs: config
+    runs-on: [self-hosted, macOS, iOS]
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: checkout private actions
+        uses: daspn/private-actions-checkout@v2
+        with:
+          actions_list: '["RoyalAholdDelhaize/action-update-version@master"]'
+          app_id: ${{ secrets.AH_DIGITAL_APP_FRONTEND_ID }}
+          app_private_key: ${{ secrets.AH_DIGITAL_APP_FRONTEND_KEY }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '${{ fromJson(needs.config.outputs.config).node-version }}'
+          registry-url: 'https://npm.pkg.github.com'
+
+      - name: Setup yarn
+        run: npm i -g yarn
+
+      - name: Get yarn cache directory
+        id: cache-dir
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache yarn directory
+        uses: actions/cache@v2
+        with:
+          path: ${{ steps.cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: CI build
+        run: ./ci-build.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.AH_DIGITAL_PACKAGES_TOKEN }}
+          WITH_COVERAGE: true
+
+      - name: Prepare env
+        run: ./scripts/create-env-file.sh
+        env:
+          CONFIG_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          API_URL_TST: ${{ secrets.API_URL_TST }}
+          API_URL_ACC: ${{ secrets.API_URL_ACC }}
+          API_URL_PRD: ${{ secrets.API_URL_PRD }}
+          AZURE_AD_CLIENT_ID_TST: ${{ secrets.AZURE_AD_CLIENT_ID_TST }}
+          AZURE_AD_CLIENT_ID_ACC: ${{ secrets.AZURE_AD_CLIENT_ID_ACC }}
+          AZURE_AD_CLIENT_ID_PRD: ${{ secrets.AZURE_AD_CLIENT_ID_PRD }}
+
+      - name: Unlock keychain
+        run: ./scripts/unlock-keychain.sh
+
+      - name: Publish iOS Debug to AppCenter
+        uses: maierj/fastlane-action@v2.1.0
+        if: github.event.inputs.configuration == 'debug'
+        with:
+          lane: 'ios app_center_debug_ci'
+          bundle-install-path: 'vendor/bundle'
+          skip-tracking: true
+        env:
+          MATCH_KEYCHAIN_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          APP_CENTER_IOS_API_TOKEN: ${{ secrets.APP_CENTER_IOS_API_TOKEN }}
+
+      - name: Publish iOS Release to AppCenter
+        uses: maierj/fastlane-action@v2.1.0
+        if: github.event.inputs.configuration == 'release'
+        with:
+          lane: 'ios app_center_release_ci'
+          bundle-install-path: 'vendor/bundle'
+          skip-tracking: true
+        env:
+          MATCH_KEYCHAIN_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          APP_CENTER_IOS_API_TOKEN: ${{ secrets.APP_CENTER_IOS_API_TOKEN }}

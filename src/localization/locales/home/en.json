@@ -1,0 +1,7 @@
+{
+  "today": "Today is {{date}}",
+  "welcome": "Welcome to <appName>React Native Template</appName>",
+  "todos": "You have {{open}} open and {{completed}} completed todos",
+  "status.signedIn": "Your status is <status>Signed In</status>",
+  "status.signedOut": "Your status is <status>Signed Out</status>"
+}

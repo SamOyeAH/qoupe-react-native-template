@@ -1,0 +1,211 @@
+name: React Native Build Release
+
+on:
+  pull_request_target:
+    types:
+      - closed
+    branches:
+      - master
+      - main
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.config.outputs.config }}
+      runner: ${{ fromJson(steps.config.outputs.config).runner }}
+      pr-branch: ${{ steps.pr.outputs.branch }}
+      pr-number: ${{ steps.pr.outputs.number }}
+      branch: ${{ steps.branch.outputs.branch }}
+    steps:
+      # see what branch this is running on
+      - id: branch
+        run: |
+          BRANCH="${{ github.ref }}"
+          echo "::set-output name=branch::${BRANCH#refs/heads/}"
+
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+      - name: read config
+        id: config
+        run: echo "::set-output name=config::`jq -M -c '.' .github/workflow-config.json`"
+
+      - name: checkout private actions
+        uses: daspn/private-actions-checkout@v2
+        with:
+          actions_list: '["RoyalAholdDelhaize/action-pull-request-info@master"]'
+          app_id: ${{ secrets.AH_DIGITAL_APP_FRONTEND_ID }}
+          app_private_key: ${{ secrets.AH_DIGITAL_APP_FRONTEND_KEY }}
+
+      # see if there was PR related to this commit
+      - name: Get PR info
+        id: pr
+        uses: ./.github/actions/action-pull-request-info
+      - if: ${{ steps.pr.outputs.branch == '' }}
+        run: echo '::warning::no pull request associated with this commit, not performing release'
+
+  build:
+    needs: config
+    if: ${{ needs.config.outputs.pr-branch != '' }}
+    runs-on: ${{ needs.config.outputs.runner }}
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sonar: ${{ steps.sonar.outputs.files_exists }}
+
+    steps:
+      - name: generate admin token to checkout & push to master
+        id: token
+        uses: tibdex/github-app-token@v1
+        with:
+          app_id: ${{ secrets.AH_DIGITAL_APP_FRONTEND_ID }}
+          private_key: ${{ secrets.AH_DIGITAL_APP_FRONTEND_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          token: ${{ steps.token.outputs.token }}
+
+      - name: checkout private actions
+        uses: daspn/private-actions-checkout@v2
+        with:
+          actions_list: '["RoyalAholdDelhaize/action-update-version@master","RoyalAholdDelhaize/action-push-to-protected@master"]'
+          app_id: ${{ secrets.AH_DIGITAL_APP_FRONTEND_ID }}
+          app_private_key: ${{ secrets.AH_DIGITAL_APP_FRONTEND_KEY }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '${{ fromJson(needs.config.outputs.config).node-version }}'
+          registry-url: 'https://npm.pkg.github.com'
+
+      - name: Setup yarn
+        if: contains(needs.config.outputs.runner, 'ah-digital')
+        run: npm i -g yarn
+
+      - name: Get yarn cache directory
+        id: cache-dir
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache yarn directory
+        uses: actions/cache@v2
+        with:
+          path: ${{ steps.cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Set release version
+        id: version
+        uses: ./.github/actions/action-update-version
+        with:
+          type: release
+          branch: ${{ needs.config.outputs.pr-branch }}
+          prNumber: ${{ needs.config.outputs.pr-number }}
+
+      - name: Increment build number
+        run: |
+          ./scripts/increment-build-number.sh
+          git add ./package.json
+
+      - name: CI build
+        run: ./ci-build.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.AH_DIGITAL_PACKAGES_TOKEN }}
+          WITH_COVERAGE: true
+
+      # Conditionally store test coverage lcov report for sonar job
+      - name: Check file existence for sonar integration
+        id: sonar
+        uses: andstor/file-existence-action@v1
+        with:
+          files: 'sonar-project.properties, coverage/lcov.info'
+
+      - name: Upload coverage file
+        if: steps.sonar.outputs.files_exists == 'true'
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage-file
+          path: coverage/lcov.info
+
+      - name: Set next version
+        uses: ./.github/actions/action-update-version
+        with:
+          type: next
+          branch: ${{ needs.config.outputs.pr-branch }}
+
+      - name: Enable push to protected branch
+        uses: ./.github/actions/action-push-to-protected
+        with:
+          token: ${{ steps.token.outputs.token }}
+          branch: ${{ needs.config.outputs.branch }}
+
+      - name: Push changes
+        run: git push origin && git push --tags
+
+  # SHOW CODING COVERAGE (CHANGES WITH MASTER)
+  sonar:
+    name: Sonar results
+    needs:
+      - config
+      - build
+    if: needs.build.outputs.sonar == 'true'
+    runs-on: ah-digital-generic
+
+    steps:
+      # fetch all (depth = 0) to use blame feature for sonar correctly
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: '0'
+
+      - name: Setup node
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ fromJson(needs.config.outputs.config).node-version }}
+          registry-url: 'https://npm.pkg.github.com'
+          //TODO change scope
+          scope: '@royalaholddelhaize'
+
+      # no yarn available on container ah-digital-generic
+      - name: Setup Yarn
+        run: npm i -g yarn
+
+      - name: Get yarn cache directory
+        id: cache-dir
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache yarn directory
+        uses: actions/cache@v2
+        with:
+          path: ${{ steps.cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Setup sonarqube-scanner
+        run: npm i -g sonarqube-scanner
+
+      - name: Download lcov code coverage results
+        uses: actions/download-artifact@v1
+        with:
+          name: coverage-file
+          path: coverage
+
+      # updating version for sonar reporting, using PR build number
+      - name: Take package version
+        shell: bash
+        run: |
+          PACKAGE_VERSION=$(jq -r .version package.json)
+          sed -i "s|sonar.projectVersion=.*|sonar.projectVersion=$PACKAGE_VERSION|g" sonar-project.properties
+
+      - name: Install dependencies
+        run: yarn
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.AH_DIGITAL_PACKAGES_TOKEN }}
+
+      - name: Run sonar scanner
+        shell: bash
+        run: sonar-scanner -Dsonar.host.url=https://sonarqube.digitaldev.nl -Dsonar.login=${{ secrets.AH_DIGITAL_SONARQUBE_TOKEN }}

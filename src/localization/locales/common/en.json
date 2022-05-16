@@ -1,0 +1,11 @@
+{
+  "home": "Home",
+  "todos": "Todos",
+  "todos.list": "Todo list",
+  "todos.item": "Todo",
+  "todos.new": "New todo",
+  "profile": "Profile",
+  "button.signIn": "Sign In",
+  "button.signOut": "Sign Out",
+  "loading": "Loading"
+}

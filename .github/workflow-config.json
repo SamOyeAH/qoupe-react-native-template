@@ -1,0 +1,10 @@
+{
+  "node-version": "14.x",
+  "team": "retail-tech-platform-enablement",
+  "runner": "ubuntu-latest",
+  "release": {
+    "deploy": {
+      "tst": true
+    }
+  }
+}

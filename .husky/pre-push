@@ -1,0 +1,8 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🧪Unit tests🧪"
+npm run test || false
+
+# If everything passes
+echo "✅Changes have been pushed✅"

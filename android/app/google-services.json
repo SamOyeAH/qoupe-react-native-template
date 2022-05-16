@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "810594543641",
+    "project_id": "own-bakplan",
+    "storage_bucket": "own-bakplan.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:810594543641:android:7a14077fbaba27112ce288",
+        "android_client_info": {
+          "package_name": "com.ahold.my.test.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "810594543641-hvuno9m0vral0u7qbcuj927f7u9vkhln.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ahold.my.test.app",
+            "certificate_hash": "164a7dbca215e50eb41aaa652d269eae7a1b5ba3"
+          }
+        },
+        {
+          "client_id": "810594543641-o345udnf6179nbag6utgh890lhgl59ot.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBffgxVGyB4_PSyS5KFtxJ1SRTbPdLnTa4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "810594543641-o345udnf6179nbag6utgh890lhgl59ot.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "810594543641-25guit2qod12lg0gt0om621p6f3momon.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "org.reactjs.native.example.template"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
